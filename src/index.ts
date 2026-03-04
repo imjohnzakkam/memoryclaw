@@ -13,6 +13,8 @@ export { auditMemories, searchMemories, deleteMemory, deleteFact } from "./memor
 export { detectPatterns } from "./patterns.ts";
 export { EpisodeIndex } from "./indexer.ts";
 export { compileSkill, writeSkillDraft, listSkills, approveSkill, rejectSkill } from "./skill-compiler.ts";
+export { default as registerPlugin } from "./plugin.ts";
+export type { OpenClawPluginApi, CommandContext } from "./plugin.ts";
 export {
   createWorkingMemory,
   updateWorkingMemory,

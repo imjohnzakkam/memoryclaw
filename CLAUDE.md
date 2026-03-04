@@ -34,6 +34,7 @@ MemoryClaw is a **brain-inspired, hierarchical memory system** built as a plugin
 | `src/working-memory.ts` | Working memory manager + `onBeforeLLM` hook |
 | `src/indexer.ts` | SQLite FTS5 inverted index for fast search at scale |
 | `src/cli.ts` | CLI entry point for all MemoryClaw commands |
+| `src/plugin.ts` | OpenClaw plugin entry point (hooks, commands, services) |
 | `src/index.ts` | Public API re-exports |
 
 ### Retrieval Pipeline
@@ -153,7 +154,7 @@ memoryclaw:
 
 Run: `bun test`
 
-78 tests across 13 files covering:
+91 tests across 14 files covering:
 - Keyword extraction, alias expansion
 - Episode parsing, scoring, indexing (SQLite FTS5)
 - Semantic lookup, dedup, conflict detection
@@ -161,3 +162,4 @@ Run: `bun test`
 - Pattern detection, skill compilation, approval workflow
 - Working memory lifecycle, prompt injection
 - Logging format and file creation
+- OpenClaw plugin registration (hooks, commands, services)

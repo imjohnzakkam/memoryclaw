@@ -1,0 +1,47 @@
+{
+  "id": "memoryclaw",
+  "name": "MemoryClaw",
+  "version": "0.1.0",
+  "description": "Brain-inspired, hierarchical memory system for OpenClaw — transparent keyword-first retrieval with optional vector fallback",
+  "entry": "src/plugin.ts",
+  "configSchema": {
+    "memoryclaw": {
+      "type": "object",
+      "properties": {
+        "configPath": {
+          "type": "string",
+          "description": "Path to memoryclaw config.yaml (overrides all other config)"
+        },
+        "path": {
+          "type": "string",
+          "default": "./memoryclaw",
+          "description": "Path to the memoryclaw data directory"
+        },
+        "fallback": {
+          "type": "string",
+          "enum": ["none", "vector"],
+          "default": "none",
+          "description": "Retrieval fallback strategy"
+        },
+        "llmProvider": {
+          "type": "string",
+          "enum": ["ollama", "openai-compatible"],
+          "default": "ollama"
+        },
+        "llmBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434"
+        },
+        "llmModel": {
+          "type": "string",
+          "default": "llama3:8b"
+        },
+        "consolidationInterval": {
+          "type": "number",
+          "default": 60,
+          "description": "Consolidation interval in minutes"
+        }
+      }
+    }
+  }
+}

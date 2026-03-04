@@ -11,6 +11,7 @@ export { consolidate } from "./consolidate.ts";
 export { updateSemanticMemory } from "./semantic-writer.ts";
 export { auditMemories, searchMemories, deleteMemory, deleteFact } from "./memories.ts";
 export { detectPatterns } from "./patterns.ts";
+export { EpisodeIndex } from "./indexer.ts";
 export { compileSkill, writeSkillDraft, listSkills, approveSkill, rejectSkill } from "./skill-compiler.ts";
 export {
   createWorkingMemory,

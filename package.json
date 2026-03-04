@@ -5,11 +5,16 @@
   "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "memoryclaw": "src/cli.ts"
+  },
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cli": "bun run src/cli.ts"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "latest",
     "@types/node": "^25.3.3",
     "vitest": "^4.0.18"
@@ -18,6 +23,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "gray-matter": "^4.0.3",
     "yaml": "^2.8.2"
   }

@@ -43,6 +43,7 @@ test-memories/
 test-consolidate/
 test-patterns/
 test-skills/
+test-index/
 
 # Secrets / credentials
 *.pem

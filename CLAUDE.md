@@ -11,20 +11,36 @@ MemoryClaw is a **brain-inspired, hierarchical memory system** built as a plugin
 1. **Working Memory** — In-memory JSON for the current task/session context (~2k tokens max)
 2. **Episodic Memory** — Compressed markdown files with YAML frontmatter in `memoryclaw/episodes/`
 3. **Semantic Memory** — Persistent facts (contacts, preferences, projects) in `memoryclaw/semantic/`
-4. **Procedural Memory** — Reusable skill files (JSON/JS) in `memoryclaw/skills/`
+4. **Procedural Memory** — Reusable skill files (JSON) in `memoryclaw/skills/`
 
-### Key Components
+### Source Modules
 
-- **Retrieval plugin** (`memoryclaw_retrieve`) — Keyword/tag search with optional vector fallback via local embeddings (Ollama)
-- **Logging plugin** (`memoryclaw_log`) — Raw interaction logging to `memoryclaw/logs/`
-- **Consolidation daemon** — Cron-based Node.js script that summarizes raw logs, extracts facts, detects action patterns
-- **Skill compiler** (experimental) — Auto-generates reusable skill templates from repeated action sequences
+| Module | Purpose |
+|--------|---------|
+| `src/config.ts` | YAML config loader with defaults |
+| `src/keywords.ts` | Keyword extraction with stop word removal |
+| `src/aliases.ts` | Synonym/alias expansion from `aliases.yaml` |
+| `src/episodic.ts` | Episode file parsing (gray-matter) + scored keyword search |
+| `src/semantic.ts` | Semantic fact entity lookup |
+| `src/vector.ts` | Vector fallback — Ollama or OpenAI-compatible embedding APIs |
+| `src/retrieve.ts` | Full retrieval pipeline orchestrator |
+| `src/logger.ts` | Raw interaction logging (markdown + YAML frontmatter) |
+| `src/llm.ts` | Chat completion abstraction (Ollama / OpenAI-compatible) |
+| `src/consolidate.ts` | Consolidation daemon: logs → episodes + facts |
+| `src/semantic-writer.ts` | Semantic memory updates with dedup + conflict detection |
+| `src/memories.ts` | User commands: audit, search, delete |
+| `src/patterns.ts` | Pattern detection from episode tag sequences |
+| `src/skill-compiler.ts` | Skill template generation + approval workflow |
+| `src/working-memory.ts` | Working memory manager + `onBeforeLLM` hook |
+| `src/indexer.ts` | SQLite FTS5 inverted index for fast search at scale |
+| `src/cli.ts` | CLI entry point for all MemoryClaw commands |
+| `src/index.ts` | Public API re-exports |
 
 ### Retrieval Pipeline
 
 ```
 User query → Keyword extraction → Synonym/alias expansion
-  → Episode search (primary, keyword/tag matching)
+  → Episode search (keyword/tag scoring)
   → If results < minPrimaryResults and fallback=vector → Vector search
   → Blend results (keyword first) → Semantic fact lookup → Inject into working memory
 ```
@@ -32,111 +48,116 @@ User query → Keyword extraction → Synonym/alias expansion
 ## Directory Structure
 
 ```
+src/                       # TypeScript source
+tests/                     # Vitest test files
 memoryclaw/
-├── episodes/          # Episodic memory (markdown + YAML frontmatter)
-├── semantic/          # Semantic memory (contacts.md, projects.md, preferences.md, _pending.md)
-├── skills/            # Procedural memory (JSON/JS skill files)
-├── logs/              # Raw interaction logs
-│   └── processed/     # Processed logs
-├── index/             # Inverted index (SQLite) for fast search
-├── daemon/            # Consolidation scripts
-│   ├── consolidate.js
-│   └── detect_patterns.js
-└── config.yaml        # MemoryClaw configuration
+├── episodes/              # Episodic memory (markdown + YAML frontmatter)
+├── semantic/              # Semantic files + aliases.yaml + _pending.md
+├── skills/                # Skill files (draft/approved JSON)
+├── logs/                  # Raw interaction logs
+│   └── processed/         # Processed logs
+├── index/                 # SQLite FTS5 index (episodes.db)
+└── config.yaml            # MemoryClaw configuration
 ```
 
 ## Design Philosophy
 
-- **Keyword-first is the core differentiator.** MemoryClaw is not "another RAG system." Transparent, explainable retrieval is the value proposition. Vector search is a fallback, not the primary path.
-- **80/20 rule:** Keyword/tag matching handles ~80% of queries transparently. Vector fallback catches the ~20% where keyword search silently fails (paraphrasing, cross-domain links, vague queries).
-- **Configurable LLM backend:** Ollama is the default for privacy, but the system accepts any OpenAI-compatible API endpoint (Groq, Together, cloud providers). The consolidation daemon just needs a chat completion endpoint.
-- **Synonym/alias expansion:** Before falling back to vectors, expand keywords via an alias map (e.g., "marketing" → "campaign-team", "budget" → "finance"). This reduces how often the vector fallback is needed.
-- **Never pay the cost of opacity unless necessary.** Vector fallback only triggers when keyword search returns fewer than `minPrimaryResults`.
+- **Keyword-first is the core differentiator.** Transparent, explainable retrieval. Not another RAG system.
+- **80/20 rule:** Keyword/tag matching handles ~80% transparently. Vector fallback catches the ~20% where keywords fail.
+- **Configurable LLM backend:** Ollama default for privacy; accepts any OpenAI-compatible endpoint.
+- **Synonym/alias expansion:** Expand keywords via alias map before falling back to vectors.
+- **Never pay the cost of opacity unless necessary.** Vector fallback only triggers when keyword search comes up short.
 
 ## Tech Stack
 
 - **Runtime:** Bun (TypeScript, ES modules)
-- **Storage:** Markdown files with YAML frontmatter, SQLite for indexing
-- **LLM backend:** Configurable — Ollama (default, local/private), or any OpenAI-compatible API endpoint
-- **Embedding models:** Configurable — nomic-embed via Ollama (default), or any compatible embedding API
-- **Configuration:** YAML
+- **Storage:** Markdown + YAML frontmatter, SQLite FTS5 for indexing
+- **LLM:** Configurable — Ollama (default) or any OpenAI-compatible API
+- **Dependencies:** gray-matter, yaml, better-sqlite3
 - **Testing:** Vitest
-- **Parent platform:** OpenClaw (skills, cron, tools ecosystem)
+- **Parent platform:** OpenClaw
 
-## Coding Conventions
+## CLI
 
-- Use ES modules (`import`/`export`) — not CommonJS
-- Skill files export a default object with `name`, `triggers`, and `run(params, context)` method
-- Episode filenames follow `YYYY-MM-DD_HH-MM-SS_summary.md` convention
-- YAML frontmatter in episodes must include: `timestamp`, `tags`, `summary`, `participants`, `confidence`
-- Facts extracted with low confidence go to `_pending.md`, not canonical semantic files
-- All auto-generated skills require explicit user approval — never auto-activate
+```bash
+bun run src/cli.ts <command> [args]
+
+# Retrieval
+  retrieve <query>          Search episodes + facts
+  search <query>            Search memories by keyword
+
+# Memory management
+  audit [limit]             Show recent episodes and pending facts
+  delete <filename>         Delete an episode
+  delete-fact <file> <key>  Delete a fact from a semantic file
+
+# Consolidation
+  consolidate               Process raw logs into episodes
+
+# Skills
+  patterns [threshold]      Detect repeated action patterns
+  compile [threshold]       Generate draft skills from patterns
+  skills                    List all skills
+  approve-skill <file>      Approve a draft skill
+  reject-skill <file>       Reject a draft skill
+
+# Indexing
+  index                     Build/rebuild SQLite search index
+  index-search <query>      Search using the SQLite index
+```
 
 ## Configuration Reference
 
-Key settings in `memoryclaw/config.yaml`:
-
 ```yaml
-retrieval:
-  primary: keyword
-  minPrimaryResults: 2
-  fallback: vector | none
-  vectorModel: nomic-embed
-  maxResults: 5
-  blendStrategy: primary_first
-
-llm:
-  provider: ollama              # ollama | openai-compatible
-  baseUrl: http://localhost:11434  # any OpenAI-compatible endpoint
-  model: llama3:8b              # for summarization
-  embeddingModel: nomic-embed   # for vector fallback
-  apiKey: ""                    # only needed for cloud providers
-
-consolidation:
-  interval: 60  # minutes
-  skillThreshold: 7  # occurrences before suggesting a skill
-  factValidation: true
-  pendingReview: true
+memoryclaw:
+  path: ./memoryclaw
+  retrieval:
+    primary: keyword
+    minPrimaryResults: 2
+    fallback: none | vector
+    maxResults: 5
+    blendStrategy: primary_first
+  llm:
+    provider: ollama | openai-compatible
+    baseUrl: http://localhost:11434
+    model: llama3:8b
+    embeddingModel: nomic-embed
+    apiKey: ""
+  consolidation:
+    interval: 60
+    skillThreshold: 7
+    factValidation: true
+    pendingReview: true
+  semantic:
+    files: [contacts.md, projects.md]
 ```
 
-## Error Handling Principles
+## Coding Conventions
 
-- Summaries include a `confidence` field (low/medium/high)
-- Facts include a `source` field referencing the originating log
-- Contradictory facts are flagged for user review, not silently overwritten
-- Raw logs are preserved (not deleted) for re-processing capability
-- Schema validation on extracted facts before writing to semantic memory
+- ES modules (`import`/`export`) only — no CommonJS
+- Episode filenames: `YYYY-MM-DD_HH-MM-SS_summary.md`
+- YAML frontmatter must include: `timestamp`, `tags`, `summary`, `participants`, `confidence`
+- Low-confidence facts → `_pending.md`, not canonical files
+- Auto-generated skills require explicit user approval
+- File permissions: `0600` for files, `0700` for directories
 
-## Security
+## Error Handling
 
-- Memory files: `0600` permissions; directories: `0700`
-- Summarization prompts instruct LLM to omit passwords, API keys, tokens
-- Post-processing regex scanner catches leaked secret patterns
-- Ollama configured to listen only on localhost
-
-## User Commands
-
-- `/memories audit` — Review recently added facts and episode summaries
-- `/memories search <query>` — Manual memory search
-- `/memories delete <id>` — Remove specific facts
-- `/memories list` — List stored memories
-- `/forget <topic>` — Remove memories about a topic
-
-## Development Phases
-
-The project follows a phased roadmap:
-- **Phase 0:** Foundation / repo setup
-- **Phase 1:** Core retrieval + hybrid fallback
-- **Phase 2:** Logging and raw storage
-- **Phase 3:** Consolidation daemon
-- **Phase 4:** Semantic memory updates
-- **Phase 5:** Skill compilation (experimental)
-- **Phase 6:** Working memory injection (`onBeforeLLM` hook)
-- **Phase 7:** Optimization and scaling (SQLite, web UI, ClawHub)
+- `confidence` field on summaries (low/medium/high)
+- `source` field on facts for traceability
+- Contradictory facts flagged, not silently overwritten
+- Raw logs preserved for re-processing
+- Schema validation before writing to semantic memory
 
 ## Testing
 
-- Test retrieval quality across: exact match, paraphrase, vague queries
-- Validate summarization output against schemas
-- Test skill compilation with conservative thresholds
-- Verify deduplication and conflict detection in semantic updates
+Run: `bun test`
+
+78 tests across 13 files covering:
+- Keyword extraction, alias expansion
+- Episode parsing, scoring, indexing (SQLite FTS5)
+- Semantic lookup, dedup, conflict detection
+- Consolidation pipeline (mocked LLM)
+- Pattern detection, skill compilation, approval workflow
+- Working memory lifecycle, prompt injection
+- Logging format and file creation

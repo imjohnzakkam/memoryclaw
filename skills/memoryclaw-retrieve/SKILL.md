@@ -32,14 +32,14 @@ The injected context appears under `**[MemoryClaw Working Memory]**` and include
 
 Users can manage their memories via slash commands:
 
-- `/memories audit [limit]` — Show recent episodes and pending facts
-- `/memories search <query>` — Search memories by keyword
-- `/memories delete <filename>` — Delete an episode
-- `/memories delete-fact <file> <key>` — Delete a semantic fact
-- `/memories skills` — List compiled skills
-- `/memories patterns [threshold]` — Detect action patterns
-- `/forget <filename>` — Quick delete an episode
-- `/consolidate` — Manually trigger log → episode processing
+- `/mclaw audit [limit]` — Show recent episodes and pending facts
+- `/mclaw search <query>` — Search memories by keyword
+- `/mclaw delete <filename>` — Delete an episode
+- `/mclaw delete-fact <file> <key>` — Delete a semantic fact
+- `/mclaw skills` — List compiled skills
+- `/mclaw patterns [threshold]` — Detect action patterns
+- `/mclaw-forget <filename>` — Quick delete an episode
+- `/mclaw-consolidate` — Manually trigger log → episode processing
 
 ## Important Notes
 

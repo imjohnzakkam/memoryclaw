@@ -59,33 +59,33 @@ describe("MemoryClaw OpenClaw Plugin", () => {
     expect(api._services.has("memoryclaw-consolidation")).toBe(true);
   });
 
-  it("registers /memories slash command", () => {
-    expect(api._commands.has("memories")).toBe(true);
-    expect(api._commands.get("memories")!.description).toContain("MemoryClaw");
+  it("registers /mclaw slash command", () => {
+    expect(api._commands.has("mclaw")).toBe(true);
+    expect(api._commands.get("mclaw")!.description).toContain("MemoryClaw");
   });
 
-  it("registers /forget slash command", () => {
-    expect(api._commands.has("forget")).toBe(true);
+  it("registers /mclaw-forget slash command", () => {
+    expect(api._commands.has("mclaw-forget")).toBe(true);
   });
 
-  it("registers /consolidate slash command", () => {
-    expect(api._commands.has("consolidate")).toBe(true);
+  it("registers /mclaw-consolidate slash command", () => {
+    expect(api._commands.has("mclaw-consolidate")).toBe(true);
   });
 
-  it("/memories returns help for unknown subcommand", async () => {
-    const cmd = api._commands.get("memories")!;
+  it("/mclaw returns help for unknown subcommand", async () => {
+    const cmd = api._commands.get("mclaw")!;
     const result = await cmd.handler({ args: "unknown" } as CommandContext);
     expect(result.text).toContain("MemoryClaw Commands");
   });
 
-  it("/memories search without query returns usage", async () => {
-    const cmd = api._commands.get("memories")!;
+  it("/mclaw search without query returns usage", async () => {
+    const cmd = api._commands.get("mclaw")!;
     const result = await cmd.handler({ args: "search" } as CommandContext);
     expect(result.text).toContain("Usage:");
   });
 
-  it("/forget without filename returns usage", async () => {
-    const cmd = api._commands.get("forget")!;
+  it("/mclaw-forget without filename returns usage", async () => {
+    const cmd = api._commands.get("mclaw-forget")!;
     const result = await cmd.handler({ args: "" } as CommandContext);
     expect(result.text).toContain("Usage:");
   });

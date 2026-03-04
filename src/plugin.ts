@@ -281,10 +281,10 @@ export default function register(api: OpenClawPluginApi): void {
     },
   });
 
-  // ---- Slash Command: /memories ----
+  // ---- Slash Command: /mclaw ----
   api.registerCommand({
-    name: "memories",
-    description: "Search, audit, or manage MemoryClaw memories",
+    name: "mclaw",
+    description: "Search, audit, or manage MemoryClaw episodic memories",
     acceptsArgs: true,
     handler: async (ctx) => {
       const args = (ctx.args ?? "").trim().split(/\s+/);
@@ -349,33 +349,35 @@ export default function register(api: OpenClawPluginApi): void {
         default:
           return {
             text: `**MemoryClaw Commands:**
-• /memories audit [limit] — Show recent memories
-• /memories search <query> — Search memories
-• /memories delete <filename> — Delete an episode
-• /memories delete-fact <file> <key> — Delete a fact
-• /memories skills — List compiled skills
-• /memories patterns [threshold] — Detect action patterns`,
+• /mclaw audit [limit] — Show recent memories
+• /mclaw search <query> — Search memories
+• /mclaw delete <filename> — Delete an episode
+• /mclaw delete-fact <file> <key> — Delete a fact
+• /mclaw skills — List compiled skills
+• /mclaw patterns [threshold] — Detect action patterns
+• /mclaw-forget <filename> — Quick-delete an episode
+• /mclaw-consolidate — Manually trigger log consolidation`,
           };
       }
     },
   });
 
-  // ---- Slash Command: /forget ----
+  // ---- Slash Command: /mclaw-forget ----
   api.registerCommand({
-    name: "forget",
-    description: "Delete a specific MemoryClaw memory by filename",
+    name: "mclaw-forget",
+    description: "Delete a specific MemoryClaw episode by filename",
     acceptsArgs: true,
     handler: (ctx) => {
       const filename = (ctx.args ?? "").trim();
-      if (!filename) return { text: "Usage: /forget <episode-filename>" };
+      if (!filename) return { text: "Usage: /mclaw-forget <episode-filename>" };
       const ok = deleteMemory(memoryclawDir, filename);
       return { text: ok ? `🗑️ Forgotten: ${filename}` : `Not found: ${filename}` };
     },
   });
 
-  // ---- Slash Command: /consolidate ----
+  // ---- Slash Command: /mclaw-consolidate ----
   api.registerCommand({
-    name: "consolidate",
+    name: "mclaw-consolidate",
     description: "Manually trigger MemoryClaw log consolidation",
     handler: async () => {
       try {

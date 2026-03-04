@@ -99,25 +99,28 @@ function resolveConfig(apiConfig?: Record<string, unknown>): MemoryClawConfig {
     return loadConfig(String(mcConfig.configPath));
   }
 
-  // Look for config in standard locations
+  // Look for config in standard locations (use absolute paths to avoid CWD issues)
+  const homeDir = process.env.HOME ?? "/tmp";
   const candidates = [
-    "./memoryclaw/config.yaml",
-    join(process.env.HOME ?? "~", ".openclaw", "workspace", "memoryclaw", "config.yaml"),
+    join(homeDir, ".openclaw", "memoryclaw", "config.yaml"),
+    join(homeDir, ".openclaw", "workspace", "memoryclaw", "config.yaml"),
   ];
 
   for (const candidate of candidates) {
-    const resolved = resolve(candidate);
-    if (existsSync(resolved)) {
-      return loadConfig(resolved);
+    if (existsSync(candidate)) {
+      return loadConfig(candidate);
     }
   }
 
-  // Fall back to defaults by loading from a non-existent path (will throw)
-  // Instead, build a default config
+  // Default path: always use absolute path under ~/.openclaw/memoryclaw
+  const defaultPath = String(mcConfig?.path ?? join(homeDir, ".openclaw", "memoryclaw"));
+  // If user specified a relative path, resolve it relative to HOME, not CWD
+  const resolvedPath = defaultPath.startsWith("/")
+    ? defaultPath
+    : join(homeDir, ".openclaw", defaultPath);
+
   return {
-    path: resolve(
-      String(mcConfig?.path ?? "./memoryclaw"),
-    ),
+    path: resolvedPath,
     retrieval: {
       primary: "keyword",
       minPrimaryResults: Number(mcConfig?.minPrimaryResults ?? 2),

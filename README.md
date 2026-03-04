@@ -317,8 +317,11 @@ MemoryClaw is distributed as a set of components that integrate with OpenClaw th
 ```yaml
 name: my-agent
 model: gpt-4
+memory:
+  enabled: false
 memoryclaw:
   enabled: true
+  disableDefaultMemory: true
   path: ~/.openclaw/workspace/memoryclaw
   retrieval:
     primary: keyword

@@ -11,7 +11,11 @@ import { EpisodeIndex } from "./indexer.ts";
 const args = process.argv.slice(2);
 const command = args[0];
 
-const configPath = resolve(process.env.MEMORYCLAW_CONFIG ?? "./memoryclaw/config.yaml");
+const HOME = process.env.HOME ?? "/tmp";
+const configPath = resolve(
+  process.env.MEMORYCLAW_CONFIG ??
+  join(HOME, ".openclaw", "memoryclaw", "config.yaml"),
+);
 let config: ReturnType<typeof loadConfig>;
 
 try {

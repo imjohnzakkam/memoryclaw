@@ -111,6 +111,7 @@ bun run src/cli.ts <command> [args]
 
 ```yaml
 memoryclaw:
+  disableDefaultMemory: true
   path: ./memoryclaw
   retrieval:
     primary: keyword
@@ -137,10 +138,14 @@ memoryclaw:
 
 - ES modules (`import`/`export`) only — no CommonJS
 - Episode filenames: `YYYY-MM-DD_HH-MM-SS_summary.md`
+- Log filenames: `YYYY-MM-DD_HH-MM-SS_channel_raw.md` (human-readable, no ISO `T` separator)
 - YAML frontmatter must include: `timestamp`, `tags`, `summary`, `participants`, `confidence`
 - Low-confidence facts → `_pending.md`, not canonical files
 - Auto-generated skills require explicit user approval
 - File permissions: `0600` for files, `0700` for directories
+- **Data directory:** Always use absolute path `~/.openclaw/memoryclaw/` — never relative paths that depend on CWD
+- **Content serialization:** NEVER write raw objects to log files. All message content must be serialized to string via `contentToString()`. Handle OpenClaw message shapes: `{text: "..."}`, `{type: "text", text: "..."}`, arrays of content blocks. Fall back to `JSON.stringify`, never produce `[object Object]`
+- **Timestamps in log bodies:** Use human-readable format (`2025-04-08 14:32`) not raw epoch/ISO
 
 ## Error Handling
 

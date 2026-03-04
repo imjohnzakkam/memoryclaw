@@ -17,6 +17,11 @@
           "default": "./memoryclaw",
           "description": "Path to the memoryclaw data directory"
         },
+        "disableDefaultMemory": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, attempts to disable OpenClaw's built-in memory so MemoryClaw is the primary memory layer"
+        },
         "fallback": {
           "type": "string",
           "enum": ["none", "vector"],

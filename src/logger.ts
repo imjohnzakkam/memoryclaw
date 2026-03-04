@@ -2,8 +2,59 @@ import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import type { LogEntry, LogMessage } from "./types.ts";
 
-function formatTimestamp(date: Date): string {
-  return date.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+function formatDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatTime(date: Date): string {
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  const s = String(date.getSeconds()).padStart(2, "0");
+  return `${h}-${min}-${s}`;
+}
+
+function formatReadableTimestamp(isoTimestamp: string): string {
+  try {
+    const date = new Date(isoTimestamp);
+    if (Number.isNaN(date.getTime())) return isoTimestamp;
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${formatDate(date)} ${h}:${min}`;
+  } catch {
+    return isoTimestamp;
+  }
+}
+
+/**
+ * Defensively serialize message content to a string.
+ * Handles: plain strings, objects with .text/.content/.parts fields,
+ * arrays of content blocks, and falls back to JSON.stringify.
+ * Never produces [object Object].
+ */
+function contentToString(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (typeof content === "number" || typeof content === "boolean") return String(content);
+
+  if (Array.isArray(content)) {
+    return content.map(contentToString).filter(Boolean).join("\n");
+  }
+
+  if (content && typeof content === "object") {
+    const obj = content as Record<string, unknown>;
+    if (typeof obj.text === "string") return obj.text;
+    if (obj.content !== undefined) return contentToString(obj.content);
+    if (Array.isArray(obj.parts)) return contentToString(obj.parts);
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch {
+      return "[unserializable content]";
+    }
+  }
+
+  return "";
 }
 
 function toMarkdown(entry: LogEntry): string {
@@ -24,7 +75,9 @@ function toMarkdown(entry: LogEntry): string {
   lines.push("processed: false", "---", "");
 
   for (const msg of entry.messages) {
-    lines.push(`### ${msg.role} (${msg.timestamp})`, "", msg.content, "");
+    const text = contentToString(msg.content);
+    const time = formatReadableTimestamp(msg.timestamp);
+    lines.push(`### ${msg.role} (${time})`, "", text, "");
   }
 
   return lines.join("\n");
@@ -48,7 +101,8 @@ export function logInteraction(
     metadata,
   };
 
-  const filename = `${formatTimestamp(now)}_${channel}_raw.md`;
+  // Human-readable filename: 2025-04-08_14-32-10_telegram_raw.md
+  const filename = `${formatDate(now)}_${formatTime(now)}_${channel}_raw.md`;
   const filePath = join(logsDir, filename);
 
   writeFileSync(filePath, toMarkdown(entry), { mode: 0o600 });

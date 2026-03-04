@@ -1,9 +1,12 @@
 import { readFileSync } from "fs";
+import { join, resolve } from "path";
 import { parse } from "yaml";
 import type { MemoryClawConfig } from "./types.ts";
 
+const HOME = process.env.HOME ?? "/tmp";
+
 const DEFAULTS: MemoryClawConfig = {
-  path: "./memoryclaw",
+  path: join(HOME, ".openclaw", "memoryclaw"),
   retrieval: {
     primary: "keyword",
     minPrimaryResults: 2,
@@ -34,8 +37,14 @@ export function loadConfig(configPath: string): MemoryClawConfig {
   const parsed = parse(raw);
   const mc = parsed?.memoryclaw ?? parsed;
 
+  // Always resolve path to absolute — relative paths are resolved against ~/.openclaw/
+  const rawPath = mc?.path ?? DEFAULTS.path;
+  const resolvedPath = rawPath.startsWith("/")
+    ? rawPath
+    : resolve(join(HOME, ".openclaw"), rawPath);
+
   return {
-    path: mc?.path ?? DEFAULTS.path,
+    path: resolvedPath,
     retrieval: { ...DEFAULTS.retrieval, ...mc?.retrieval },
     llm: { ...DEFAULTS.llm, ...mc?.llm },
     consolidation: { ...DEFAULTS.consolidation, ...mc?.consolidation },

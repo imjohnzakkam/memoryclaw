@@ -41,7 +41,11 @@ export async function chatCompletion(
       headers["Authorization"] = `Bearer ${llmConfig.apiKey}`;
     }
 
-    const response = await fetch(`${llmConfig.baseUrl}/v1/chat/completions`, {
+    const trimmedBase = llmConfig.baseUrl.replace(/\/+$/, "");
+    const endpoint = /\/v1$/i.test(trimmedBase)
+      ? `${trimmedBase}/chat/completions`
+      : `${trimmedBase}/v1/chat/completions`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({

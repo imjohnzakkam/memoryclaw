@@ -22,9 +22,12 @@ Respond with ONLY valid JSON, no markdown fencing.`;
 function parseLogFrontmatter(filePath: string): { processed: boolean; timestamp: string; channel: string } {
   const raw = readFileSync(filePath, "utf-8");
   const { data } = matter(raw);
+  const parsedTimestamp = data.timestamp instanceof Date
+    ? data.timestamp.toISOString()
+    : String(data.timestamp ?? "");
   return {
     processed: data.processed === true || data.processed === "true",
-    timestamp: String(data.timestamp ?? ""),
+    timestamp: parsedTimestamp,
     channel: String(data.channel ?? "unknown"),
   };
 }
@@ -119,6 +122,7 @@ export interface ConsolidateOptions {
   episodesDir: string;
   semanticDir: string;
   llmConfig: LlmConfig;
+  llmFallbackConfig?: LlmConfig;
   consolidationConfig: ConsolidationConfig;
   semanticFiles: string[];
 }
@@ -171,12 +175,24 @@ export async function consolidate(opts: ConsolidateOptions): Promise<Consolidate
       opts.llmConfig,
     );
 
-    if (!response) {
+    const fallbackResponse = !response && opts.llmFallbackConfig
+      ? await chatCompletion(
+          [
+            { role: "system", content: SUMMARIZATION_PROMPT },
+            { role: "user", content: transcript },
+          ],
+          opts.llmFallbackConfig,
+        )
+      : null;
+
+    const finalResponse = response ?? fallbackResponse;
+
+    if (!finalResponse) {
       report.failed++;
       continue;
     }
 
-    const result = parseConsolidationResponse(response);
+    const result = parseConsolidationResponse(finalResponse);
     if (!result) {
       report.failed++;
       continue;

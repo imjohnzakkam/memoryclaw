@@ -1,11 +1,11 @@
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import type { Episode } from "./types.ts";
 import { loadEpisodes } from "./episodic.ts";
 
 export class EpisodeIndex {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(indexDir: string) {
     if (!existsSync(indexDir)) {
@@ -13,7 +13,7 @@ export class EpisodeIndex {
     }
 
     this.db = new Database(join(indexDir, "episodes.db"));
-    this.db.pragma("journal_mode = WAL");
+    this.db.exec("PRAGMA journal_mode = WAL;");
     this.init();
   }
 
@@ -117,7 +117,6 @@ export class EpisodeIndex {
   }
 
   searchFullText(query: string, maxResults: number): string[] {
-    // Escape FTS5 special characters
     const escaped = query.replace(/['"*(){}[\]^~\\:]/g, " ").trim();
     if (!escaped) return [];
 
@@ -154,21 +153,18 @@ export class EpisodeIndex {
     query: string,
     maxResults: number,
   ): string[] {
-    // Combine tag matches + full-text search, deduplicated
     const tagResults = this.searchByTags(keywords, maxResults);
     const ftsResults = this.searchFullText(query, maxResults);
 
     const seen = new Set<string>();
     const combined: string[] = [];
 
-    // Tag matches first (higher precision)
     for (const file of tagResults) {
       if (!seen.has(file)) {
         seen.add(file);
         combined.push(file);
       }
     }
-    // Then FTS results
     for (const file of ftsResults) {
       if (!seen.has(file)) {
         seen.add(file);

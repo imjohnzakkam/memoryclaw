@@ -6,7 +6,7 @@
  */
 
 import { join, resolve } from "path";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { loadConfig } from "./config.ts";
 import { retrieve } from "./retrieve.ts";
 import { logInteraction } from "./logger.ts";
@@ -30,7 +30,7 @@ import {
   hydrateWorkingMemory,
   onBeforeLLM,
 } from "./working-memory.ts";
-import type { MemoryClawConfig, WorkingMemory, LogMessage } from "./types.ts";
+import type { MemoryClawConfig, WorkingMemory, LogMessage, LlmConfig } from "./types.ts";
 
 // ---------- Types for OpenClaw Plugin API ----------
 
@@ -64,6 +64,12 @@ export interface OpenClawPluginApi {
     meta?: { commands: string[] },
   ): void;
 
+  on?(
+    hookName: string,
+    handler: (...args: unknown[]) => Promise<unknown> | unknown,
+    opts?: { priority?: number },
+  ): void;
+
   logger: {
     info: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
@@ -88,8 +94,13 @@ let memoryclawConfig: MemoryClawConfig;
 let memoryclawDir: string;
 let workingMemory: WorkingMemory = createWorkingMemory("");
 let consolidationTimer: ReturnType<typeof setInterval> | null = null;
+let llmFallbackConfig: LlmConfig | undefined;
 
 // ---------- Helpers ----------
+
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+}
 
 function resolveConfig(apiConfig?: Record<string, unknown>): MemoryClawConfig {
   // Try OpenClaw config first, then fall back to file
@@ -147,6 +158,87 @@ function resolveConfig(apiConfig?: Record<string, unknown>): MemoryClawConfig {
   };
 }
 
+function resolveTemplate(value: string, envConfig?: Record<string, unknown>): string {
+  return value.replace(/\$\{([A-Z0-9_]+)\}/g, (_match, key: string) => {
+    const envVal = process.env[key];
+    if (envVal) return envVal;
+    const cfgVal = envConfig?.[key];
+    return typeof cfgVal === "string" ? cfgVal : "";
+  });
+}
+
+function resolveOpenClawLlmFallback(apiConfig?: Record<string, unknown>): LlmConfig | undefined {
+  const models = asObject(apiConfig?.models);
+  const providers = asObject(models?.providers);
+  if (!providers) return undefined;
+
+  const envConfig = asObject(apiConfig?.env);
+  const defaults = asObject(apiConfig?.agents);
+  const defaultsAgent = asObject(defaults?.defaults);
+  const modelCfg = asObject(defaultsAgent?.model);
+  const primary = typeof modelCfg?.primary === "string" ? modelCfg.primary : "";
+  const [primaryProvider, ...primaryModelParts] = primary.split("/");
+  const primaryModel = primaryModelParts.join("/");
+
+  const providerEntries = Object.entries(providers)
+    .map(([name, raw]) => ({ name, cfg: asObject(raw) }))
+    .filter((entry): entry is { name: string; cfg: Record<string, unknown> } => Boolean(entry.cfg))
+    .filter((entry) => String(entry.cfg.api ?? "") === "openai-completions");
+
+  if (providerEntries.length === 0) return undefined;
+
+  const preferred = providerEntries.find((p) => p.name === primaryProvider) ?? providerEntries[0]!;
+  const baseUrl = String(preferred.cfg.baseUrl ?? "").trim();
+  if (!baseUrl) return undefined;
+
+  const modelsList = Array.isArray(preferred.cfg.models) ? preferred.cfg.models : [];
+  let modelId = preferred.name === primaryProvider ? primaryModel : "";
+  if (!modelId) {
+    const first = modelsList[0];
+    if (first && typeof first === "object") {
+      modelId = String((first as Record<string, unknown>).id ?? "");
+    }
+  }
+  if (!modelId) return undefined;
+
+  const rawApiKey = String(preferred.cfg.apiKey ?? "");
+  const apiKey = resolveTemplate(rawApiKey, envConfig);
+
+  return {
+    provider: "openai-compatible",
+    baseUrl,
+    model: modelId,
+    embeddingModel: "nomic-embed",
+    apiKey,
+  };
+}
+
+function disableDefaultMemoryIfRequested(api: OpenClawPluginApi): void {
+  const root = asObject(api.config);
+  const mcConfig = asObject(root?.memoryclaw);
+  if (mcConfig?.disableDefaultMemory !== true) return;
+
+  // Best-effort config takeover for common OpenClaw config shapes.
+  const memoryConfig = asObject(root?.memory);
+  if (memoryConfig) {
+    memoryConfig.enabled = false;
+    api.logger.info("[memoryclaw] Disabled OpenClaw default memory (memory.enabled=false)");
+    return;
+  }
+
+  const agentConfig = asObject(root?.agent);
+  const agentMemory = asObject(agentConfig?.memory);
+  if (agentMemory) {
+    agentMemory.enabled = false;
+    api.logger.info("[memoryclaw] Disabled OpenClaw default memory (agent.memory.enabled=false)");
+    return;
+  }
+
+  api.logger.warn(
+    "[memoryclaw] disableDefaultMemory=true but no known OpenClaw memory config was found. Set memory.enabled=false in your OpenClaw config.",
+  );
+}
+
 function ensureDirectories(baseDir: string): void {
   const dirs = ["episodes", "semantic", "skills", "logs", "index"];
   for (const dir of dirs) {
@@ -155,21 +247,132 @@ function ensureDirectories(baseDir: string): void {
       mkdirSync(dirPath, { recursive: true, mode: 0o700 });
     }
   }
+
+  const semanticDefaults: Array<{ file: string; content: string }> = [
+    { file: "contacts.md", content: "# Contacts\n" },
+    { file: "projects.md", content: "# Projects\n" },
+    { file: "aliases.yaml", content: "{}\n" },
+  ];
+  for (const entry of semanticDefaults) {
+    const path = join(baseDir, "semantic", entry.file);
+    if (!existsSync(path)) {
+      writeFileSync(path, entry.content, { mode: 0o600 });
+    }
+  }
 }
 
-// ---------- Main Plugin Registration ----------
+function extractLatestUserMessage(messages: unknown[] | undefined): string {
+  if (!Array.isArray(messages) || messages.length === 0) return "";
+  const normalized = messages
+    .map((m) => (m && typeof m === "object" ? (m as Record<string, unknown>) : null))
+    .filter((m): m is Record<string, unknown> => m !== null)
+    .filter((m) => String(m.role ?? "").toLowerCase() === "user")
+    .map((m) => String(m.content ?? "").trim())
+    .filter((text) => text.length > 0);
+  return normalized[normalized.length - 1] ?? "";
+}
 
-export default function register(api: OpenClawPluginApi): void {
-  // Resolve config
-  memoryclawConfig = resolveConfig(api.config);
-  memoryclawDir = resolve(memoryclawConfig.path);
+function extractContentText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
 
-  // Ensure directory structure exists
-  ensureDirectories(memoryclawDir);
+  if (Array.isArray(value)) {
+    const parts = value.map(extractContentText).filter((s) => s.length > 0);
+    return parts.join("\n").trim();
+  }
 
-  api.logger.info(`[memoryclaw] Initialized — data dir: ${memoryclawDir}`);
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.text === "string") return obj.text.trim();
+    if (obj.content !== undefined) {
+      const nested = extractContentText(obj.content);
+      if (nested) return nested;
+    }
+    if (Array.isArray(obj.parts)) {
+      const fromParts = extractContentText(obj.parts);
+      if (fromParts) return fromParts;
+    }
+    try {
+      return JSON.stringify(obj);
+    } catch {
+      return "";
+    }
+  }
 
-  // ---- Hook: Before LLM (inject memory context) ----
+  return "";
+}
+
+function normalizeTimestamp(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function normalizeLogMessages(messages: unknown[] | undefined): LogMessage[] {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const out: LogMessage[] = [];
+  for (const raw of messages) {
+    if (!raw || typeof raw !== "object") continue;
+    const msg = raw as Record<string, unknown>;
+    const role = String(msg.role ?? "").toLowerCase();
+    if (role !== "user" && role !== "assistant" && role !== "system" && role !== "tool") continue;
+    const content = extractContentText(msg.content);
+    if (!content) continue;
+    out.push({
+      role: role as LogMessage["role"],
+      content,
+      timestamp: normalizeTimestamp(msg.timestamp),
+    });
+  }
+  return out;
+}
+
+function registerMemoryHooks(api: OpenClawPluginApi): void {
+  // Preferred modern API in OpenClaw: lifecycle hooks via api.on(...)
+  if (typeof api.on === "function") {
+    api.on("before_agent_start", async (event: unknown) => {
+      const e = (event ?? {}) as Record<string, unknown>;
+      const latestQuery = extractLatestUserMessage(e.messages as unknown[] | undefined);
+      if (!latestQuery) return;
+
+      try {
+        workingMemory = await hydrateWorkingMemory(
+          workingMemory,
+          latestQuery,
+          memoryclawConfig,
+        );
+
+        const basePrompt = String(e.systemPrompt ?? e.prompt ?? "");
+        const enrichedPrompt = onBeforeLLM(workingMemory, basePrompt);
+        return { systemPrompt: enrichedPrompt };
+      } catch (err) {
+        api.logger.warn(`[memoryclaw] Retrieval failed: ${err}`);
+      }
+    });
+
+    api.on("agent_end", async (event: unknown, ctx: unknown) => {
+      const e = (event ?? {}) as Record<string, unknown>;
+      const c = (ctx ?? {}) as Record<string, unknown>;
+      const logMessages = normalizeLogMessages(e.messages as unknown[] | undefined);
+      if (logMessages.length === 0) return;
+
+      try {
+        logInteraction(
+          join(memoryclawDir, "logs"),
+          String(c.messageProvider ?? "unknown"),
+          logMessages,
+        );
+      } catch (err) {
+        api.logger.warn(`[memoryclaw] Logging failed: ${err}`);
+      }
+    });
+
+    return;
+  }
+
+  // Backward compatibility for older hook runtimes.
   api.registerHook(
     "agent:beforeLLM",
     async (params: unknown) => {
@@ -203,7 +406,6 @@ export default function register(api: OpenClawPluginApi): void {
     },
   );
 
-  // ---- Hook: After Response (log interaction) ----
   api.registerHook(
     "agent:afterResponse",
     async (params: unknown) => {
@@ -215,11 +417,8 @@ export default function register(api: OpenClawPluginApi): void {
       if (!p.messages || p.messages.length === 0) return;
 
       try {
-        const logMessages: LogMessage[] = p.messages.map((m) => ({
-          role: m.role as LogMessage["role"],
-          content: m.content,
-          timestamp: m.timestamp ?? new Date().toISOString(),
-        }));
+        const logMessages = normalizeLogMessages(p.messages as unknown[]);
+        if (logMessages.length === 0) return;
 
         logInteraction(
           join(memoryclawDir, "logs"),
@@ -235,6 +434,30 @@ export default function register(api: OpenClawPluginApi): void {
       description: "Logs each conversation turn for later consolidation",
     },
   );
+}
+
+// ---------- Main Plugin Registration ----------
+
+export default function register(api: OpenClawPluginApi): void {
+  disableDefaultMemoryIfRequested(api);
+
+  // Resolve config
+  memoryclawConfig = resolveConfig(api.config);
+  memoryclawDir = resolve(memoryclawConfig.path);
+  llmFallbackConfig = resolveOpenClawLlmFallback(api.config);
+
+  // Ensure directory structure exists
+  ensureDirectories(memoryclawDir);
+
+  api.logger.info(`[memoryclaw] Initialized — data dir: ${memoryclawDir}`);
+  if (llmFallbackConfig) {
+    api.logger.info(
+      `[memoryclaw] LLM fallback enabled via OpenClaw provider/model: ${llmFallbackConfig.model}`,
+    );
+  }
+
+  // ---- Hook registration (OpenClaw lifecycle API + legacy fallback) ----
+  registerMemoryHooks(api);
 
   // ---- Background Service: Consolidation Daemon ----
   api.registerService({
@@ -252,6 +475,7 @@ export default function register(api: OpenClawPluginApi): void {
             episodesDir: join(memoryclawDir, "episodes"),
             semanticDir: join(memoryclawDir, "semantic"),
             llmConfig: memoryclawConfig.llm,
+            llmFallbackConfig,
             consolidationConfig: memoryclawConfig.consolidation,
             semanticFiles: memoryclawConfig.semantic.files,
           });
@@ -349,25 +573,45 @@ export default function register(api: OpenClawPluginApi): void {
           return { text: `**Patterns (threshold: ${threshold}):**\n\n${lines.join("\n")}` };
         }
 
+        case "consolidate": {
+          try {
+            const report = await consolidate({
+              logsDir: join(memoryclawDir, "logs"),
+              episodesDir: join(memoryclawDir, "episodes"),
+              semanticDir: join(memoryclawDir, "semantic"),
+              llmConfig: memoryclawConfig.llm,
+              llmFallbackConfig,
+              consolidationConfig: memoryclawConfig.consolidation,
+              semanticFiles: memoryclawConfig.semantic.files,
+            });
+            return {
+              text: `**Consolidation complete:**\n\nProcessed: ${report.processed}\nSkipped: ${report.skipped}\nFailed: ${report.failed}\nEpisodes created: ${report.episodes.length}`,
+            };
+          } catch (err) {
+            return { text: `Consolidation failed: ${err}` };
+          }
+        }
+
         default:
           return {
             text: `**MemoryClaw Commands:**
 • /mclaw audit [limit] — Show recent memories
 • /mclaw search <query> — Search memories
+• /mclaw consolidate — Run consolidation now
 • /mclaw delete <filename> — Delete an episode
 • /mclaw delete-fact <file> <key> — Delete a fact
 • /mclaw skills — List compiled skills
 • /mclaw patterns [threshold] — Detect action patterns
-• /mclaw-forget <filename> — Quick-delete an episode
-• /mclaw-consolidate — Manually trigger log consolidation`,
+• /mclaw_forget <filename> — Quick-delete an episode
+• /mclaw_consolidate — Manually trigger log consolidation`,
           };
       }
     },
   });
 
-  // ---- Slash Command: /mclaw-forget ----
+  // ---- Slash Command: /mclaw_forget ----
   api.registerCommand({
-    name: "mclaw-forget",
+    name: "mclaw_forget",
     description: "Delete a specific MemoryClaw episode by filename",
     acceptsArgs: true,
     handler: (ctx) => {
@@ -378,9 +622,9 @@ export default function register(api: OpenClawPluginApi): void {
     },
   });
 
-  // ---- Slash Command: /mclaw-consolidate ----
+  // ---- Slash Command: /mclaw_consolidate ----
   api.registerCommand({
-    name: "mclaw-consolidate",
+    name: "mclaw_consolidate",
     description: "Manually trigger MemoryClaw log consolidation",
     handler: async () => {
       try {
@@ -389,6 +633,7 @@ export default function register(api: OpenClawPluginApi): void {
           episodesDir: join(memoryclawDir, "episodes"),
           semanticDir: join(memoryclawDir, "semantic"),
           llmConfig: memoryclawConfig.llm,
+          llmFallbackConfig,
           consolidationConfig: memoryclawConfig.consolidation,
           semanticFiles: memoryclawConfig.semantic.files,
         });

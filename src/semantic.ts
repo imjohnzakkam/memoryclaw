@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 export function loadSemanticFiles(
@@ -7,7 +7,9 @@ export function loadSemanticFiles(
 ): Map<string, string> {
   const data = new Map<string, string>();
   for (const file of files) {
-    const content = readFileSync(join(semanticDir, file), "utf-8");
+    const path = join(semanticDir, file);
+    if (!existsSync(path)) continue;
+    const content = readFileSync(path, "utf-8");
     data.set(file, content);
   }
   return data;

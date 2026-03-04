@@ -37,6 +37,19 @@ function createMockApi(): OpenClawPluginApi & {
   };
 }
 
+function createMockApiWithLifecycle(): ReturnType<typeof createMockApi> & {
+  _lifecycleHooks: Map<string, Function>;
+} {
+  const api = createMockApi() as ReturnType<typeof createMockApi> & {
+    _lifecycleHooks: Map<string, Function>;
+  };
+  api._lifecycleHooks = new Map();
+  api.on = (hookName: string, handler: Function) => {
+    api._lifecycleHooks.set(hookName, handler);
+  };
+  return api;
+}
+
 describe("MemoryClaw OpenClaw Plugin", () => {
   let api: ReturnType<typeof createMockApi>;
 
@@ -64,12 +77,12 @@ describe("MemoryClaw OpenClaw Plugin", () => {
     expect(api._commands.get("mclaw")!.description).toContain("MemoryClaw");
   });
 
-  it("registers /mclaw-forget slash command", () => {
-    expect(api._commands.has("mclaw-forget")).toBe(true);
+  it("registers /mclaw_forget slash command", () => {
+    expect(api._commands.has("mclaw_forget")).toBe(true);
   });
 
-  it("registers /mclaw-consolidate slash command", () => {
-    expect(api._commands.has("mclaw-consolidate")).toBe(true);
+  it("registers /mclaw_consolidate slash command", () => {
+    expect(api._commands.has("mclaw_consolidate")).toBe(true);
   });
 
   it("/mclaw returns help for unknown subcommand", async () => {
@@ -84,8 +97,8 @@ describe("MemoryClaw OpenClaw Plugin", () => {
     expect(result.text).toContain("Usage:");
   });
 
-  it("/mclaw-forget without filename returns usage", async () => {
-    const cmd = api._commands.get("mclaw-forget")!;
+  it("/mclaw_forget without filename returns usage", async () => {
+    const cmd = api._commands.get("mclaw_forget")!;
     const result = await cmd.handler({ args: "" } as CommandContext);
     expect(result.text).toContain("Usage:");
   });
@@ -102,6 +115,24 @@ describe("MemoryClaw OpenClaw Plugin", () => {
     );
   });
 
+  it("disables OpenClaw default memory when configured", () => {
+    const apiWithCoreMemory = createMockApi();
+    apiWithCoreMemory.config = {
+      memory: { enabled: true },
+      memoryclaw: {
+        path: "/tmp/memoryclaw-test-plugin",
+        disableDefaultMemory: true,
+      },
+    };
+
+    register(apiWithCoreMemory);
+
+    expect((apiWithCoreMemory.config!.memory as { enabled: boolean }).enabled).toBe(false);
+    expect(apiWithCoreMemory.logger.info).toHaveBeenCalledWith(
+      "[memoryclaw] Disabled OpenClaw default memory (memory.enabled=false)",
+    );
+  });
+
   it("beforeLLM hook returns params unchanged when no user messages", async () => {
     const hook = api._hooks.get("agent:beforeLLM")!;
     const params = { systemPrompt: "Hello", messages: [] };
@@ -115,5 +146,13 @@ describe("MemoryClaw OpenClaw Plugin", () => {
     expect(() => service.start()).not.toThrow();
     // Stop shouldn't throw
     expect(() => service.stop()).not.toThrow();
+  });
+
+  it("registers lifecycle hooks when api.on is available", () => {
+    const lifecycleApi = createMockApiWithLifecycle();
+    register(lifecycleApi);
+
+    expect(lifecycleApi._lifecycleHooks.has("before_agent_start")).toBe(true);
+    expect(lifecycleApi._lifecycleHooks.has("agent_end")).toBe(true);
   });
 });

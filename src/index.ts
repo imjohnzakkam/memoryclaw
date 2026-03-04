@@ -10,6 +10,18 @@ export { chatCompletion } from "./llm.ts";
 export { consolidate } from "./consolidate.ts";
 export { updateSemanticMemory } from "./semantic-writer.ts";
 export { auditMemories, searchMemories, deleteMemory, deleteFact } from "./memories.ts";
+export { detectPatterns } from "./patterns.ts";
+export { compileSkill, writeSkillDraft, listSkills, approveSkill, rejectSkill } from "./skill-compiler.ts";
+export {
+  createWorkingMemory,
+  updateWorkingMemory,
+  addObservation,
+  addFact,
+  clearWorkingMemory,
+  hydrateWorkingMemory,
+  workingMemoryToPrompt,
+  onBeforeLLM,
+} from "./working-memory.ts";
 export type {
   MemoryClawConfig,
   LlmConfig,
@@ -23,4 +35,9 @@ export type {
   ConsolidationResult,
   ExtractedFact,
   SemanticConflict,
+  ActionSequence,
+  SkillTemplate,
+  SkillParameter,
+  SkillStep,
+  WorkingMemory,
 } from "./types.ts";

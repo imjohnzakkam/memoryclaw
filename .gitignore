@@ -41,6 +41,8 @@ test-logs/
 test-semantic/
 test-memories/
 test-consolidate/
+test-patterns/
+test-skills/
 
 # Secrets / credentials
 *.pem

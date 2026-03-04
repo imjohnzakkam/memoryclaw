@@ -83,3 +83,45 @@ export interface SemanticConflict {
   newValue: string;
   source: string;
 }
+
+// Phase 5: Skill Compilation
+
+export interface ActionSequence {
+  actions: string[];
+  count: number;
+  sources: string[];
+}
+
+export interface SkillTemplate {
+  name: string;
+  triggers: string[];
+  status: "draft" | "approved" | "rejected";
+  parameters: SkillParameter[];
+  steps: SkillStep[];
+  source: string;
+  createdAt: string;
+}
+
+export interface SkillParameter {
+  name: string;
+  type: string;
+  source: string;
+  optional: boolean;
+}
+
+export interface SkillStep {
+  action: string;
+  params: Record<string, string>;
+}
+
+// Phase 6: Working Memory
+
+export interface WorkingMemory {
+  goal: string;
+  plan: string[];
+  facts: Record<string, string>;
+  recentObservations: string[];
+  activeSkill: string | null;
+  retrievedEpisodes: string[];
+  retrievedFacts: Record<string, string>;
+}

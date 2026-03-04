@@ -1,0 +1,29 @@
+# Synonym/alias mappings for keyword expansion
+# Format: canonical_term: [synonym1, synonym2, ...]
+# Mappings are bidirectional — searching for any synonym also matches the canonical term
+
+budget:
+  - finance
+  - spending
+  - cost
+  - expenses
+
+marketing:
+  - campaign-team
+  - ads
+  - advertising
+
+travel:
+  - flight
+  - booking
+  - trip
+
+email:
+  - mail
+  - message
+  - send
+
+meeting:
+  - standup
+  - sync
+  - call

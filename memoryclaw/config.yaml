@@ -1,0 +1,23 @@
+memoryclaw:
+  path: ./memoryclaw
+  retrieval:
+    primary: keyword
+    minPrimaryResults: 2
+    fallback: none
+    maxResults: 5
+    blendStrategy: primary_first
+  llm:
+    provider: ollama
+    baseUrl: http://localhost:11434
+    model: llama3:8b
+    embeddingModel: nomic-embed
+    apiKey: ""
+  consolidation:
+    interval: 60
+    skillThreshold: 7
+    factValidation: true
+    pendingReview: true
+  semantic:
+    files:
+      - contacts.md
+      - projects.md

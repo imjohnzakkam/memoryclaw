@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data
+memoryclaw/logs/
+memoryclaw/index/
+
+# Pending/staging files (user-specific)
+memoryclaw/semantic/_pending.md
+
+# Coverage & testing
+coverage/
+.nyc_output/
+test-logs/
+test-semantic/
+test-memories/
+test-consolidate/
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json

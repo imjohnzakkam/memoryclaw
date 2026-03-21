@@ -1,11 +1,7 @@
-<p align="center">
-  <img src=".github/assets/memoryclaw-banner.png" alt="MemoryClaw" width="600" />
-</p>
-
-<h1 align="center">MemoryClaw</h1>
+<h1 align="center">🧠 MemoryClaw</h1>
 
 <p align="center">
-  <strong>A brain-inspired memory system for AI agents. Transparent. Debuggable. No black boxes.</strong>
+  <strong>A brain-inspired memory system for AI agents.<br/>Transparent. Debuggable. No black boxes.</strong>
 </p>
 
 <p align="center">

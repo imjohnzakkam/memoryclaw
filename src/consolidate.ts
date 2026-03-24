@@ -92,7 +92,7 @@ function writeEpisode(
     .replace(/\s+/g, "-")
     .slice(0, 50);
 
-  const datePrefix = timestamp.replace(/[:.]/g, "-").slice(0, 19);
+  const datePrefix = timestamp.replace("T", "_").replace(/[:.]/g, "-").slice(0, 19);
   const filename = `${datePrefix}_${slug}.md`;
   const filePath = join(episodesDir, filename);
 
